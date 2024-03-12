@@ -398,6 +398,46 @@ async def remove_user(message: types.Message, state: FSMContext):
     await message.answer("Member succesfuly removed!", reply_markup=keyboard)
 
 
+
+@dp.message_handler(lambda message: message.text == "Create Task")
+async def create_task(message: types.Message, state: FSMContext):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+    yes = types.KeyboardButton("Yes")
+    no = types.KeyboardButton("No")
+    await message.answer("Ok you have some Technical task")
+
+
+@dp.message_handler(lambda message: message.text == "Yes")
+async def technical_task(message: types.Message, state: FSMContext):
+    await message.answer("Please enter your Technical task")
+    await state.set_state(States.technical_task)
+
+task = {}
+
+@dp.message_handler(state=States.technical_task)
+async def save_task(message: types.Message, state: FSMContext):
+    task['task'] = message.text
+
+    await message.answer("Enter the subject of the task")
+
+
+@dp.message_handler(state=States.task_subject)
+async def task_subject(message: types.Message):
+    task['task_subject'] = message.text
+    cursor.execute("SELECT member_name FROM members WHERE group_name = ?", (group_name,))
+    all_grups = cursor.fetchall()
+
+    keyboard = InlineKeyboardMarkup()
+    for row in all_grups:
+        button = InlineKeyboardButton(text=row[0], callback_data=f"{row[0]}")
+        keyboard.add(button)
+
+    await message.answer("Please select member:", reply_markup=keyboard)
+
+    
+
+
 # Start the bot with the executor   
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)

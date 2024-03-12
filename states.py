@@ -16,3 +16,5 @@ class States(StatesGroup):
     try_group_2 = State()
     try_group_3 = State()
     team_name = State()
+    technical_task = State()
+    task_subject = State()
