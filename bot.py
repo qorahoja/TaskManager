@@ -141,6 +141,7 @@ async def login_pass(message: types.Message, state: FSMContext):
         create_grup = types.KeyboardButton("Create group 👥")
         settings = types.KeyboardButton("Settings ⚙")
         my_groups = types.KeyboardButton("My Groups")
+
         
         keyboard.add(create_grup, settings, my_groups)
         await message.answer("Welcome Back!", reply_markup=keyboard)
@@ -334,7 +335,10 @@ async def join_group(callback_query: CallbackQuery):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     add_member = types.KeyboardButton("Add member ➕")
     members = types.KeyboardButton("Members 🫂")
+    create_task = types.KeyboardButton("Create Task")
     keyboard.add(add_member, members)
+
+
 
     
     await callback_query.message.delete()
