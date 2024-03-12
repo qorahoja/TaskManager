@@ -42,7 +42,6 @@ async def start(message: types.Message):
         cursor.execute("SELECT group_admin FROM groups")
         all_admins = cursor.fetchall()
         for row_admins in all_admins:
-            print(row_admins[0])
             if user_id == row_admins[0]:
                 await message.answer("You are admin this group")
             else:
@@ -50,24 +49,25 @@ async def start(message: types.Message):
                 member_name  = message.from_user.first_name
                 member_id = message.from_user.id
         
-        cursor.execute("INSERT INTO members (member_id, member_name, group_name) VALUES (?, ?, ?)", (member_id, member_name, group_name,))
-        conn.commit()
+                cursor.execute("INSERT INTO members (member_id, member_name, group_name) VALUES (?, ?, ?)", (member_id, member_name, group_name,))
+                conn.commit()
 
         await message.answer(f"Welcome new member you have to joined to {group_name}")
-    user_name = message.from_user.first_name
+    else:
+        user_name = message.from_user.first_name
 
-    # Create keyboard with buttons
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    register_button = types.KeyboardButton("Register 👥")
-    login_button = types.KeyboardButton("Login 👤")
-    
-    keyboard.add(register_button, login_button)
+        # Create keyboard with buttons
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        register_button = types.KeyboardButton("Register 👥")
+        login_button = types.KeyboardButton("Login 👤")
+        
+        keyboard.add(register_button, login_button)
 
-    await message.answer(
-        f"Welcome <b>{user_name}</b> to the Task Management Bot! 🤖. If you don't have an account, please register!",
-        parse_mode=types.ParseMode.HTML,
-        reply_markup=keyboard
-    )
+        await message.answer(
+            f"Welcome <b>{user_name}</b> to the Task Management Bot! 🤖. If you don't have an account, please register!",
+            parse_mode=types.ParseMode.HTML,
+            reply_markup=keyboard
+        )
 
 
 
@@ -348,6 +348,50 @@ async def add_member(message: types.Message, state: FSMContext):
 
     await message.reply(f"This is a link for people to join your group\n {link}")
 
+
+@dp.message_handler(lambda message: message.text == "Members 🫂")
+async def members(message: types.Message, state: FSMContext):
+    group_name = group["group_name"]
+    cursor.execute("SELECT member_name FROM members WHERE group_name = ?", (group_name,))
+    all_grups = cursor.fetchall()
+
+    keyboard = InlineKeyboardMarkup()
+    for row in all_grups:
+        button = InlineKeyboardButton(text=row[0], callback_data=f"member_{row[0]}")
+        keyboard.add(button)
+
+    await message.answer("Members:", reply_markup=keyboard)
+
+member = {}
+
+@dp.callback_query_handler(lambda query: query.data.startswith('member_'))
+async def join_group(callback_query: CallbackQuery):
+    
+    member_name = callback_query.data.split('_')[1]  # Extract the group name from the callback data
+    
+    member['name'] = member_name
+    
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    remove_member = types.KeyboardButton("Remove User")
+    
+    keyboard.add(remove_member)
+
+    
+    await callback_query.message.delete()
+    await callback_query.message.answer(f"Member name {member_name}", reply_markup=keyboard)
+
+
+@dp.message_handler(lambda message: message.text == "Remove User")
+async def remove_user(message: types.Message, state: FSMContext):
+    member_name = member["name"]
+    cursor.execute("DELETE FROM members WHERE member_name = ?", (member_name,))
+    conn.commit()
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    create_grup = types.KeyboardButton("Create group 👥")
+    settings = types.KeyboardButton("Settings ⚙")
+    my_groups = types.KeyboardButton("My Groups")
+    keyboard.add(create_grup, settings, my_groups)
+    await message.answer("Member succesfuly removed!", reply_markup=keyboard)
 
 
 # Start the bot with the executor   
