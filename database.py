@@ -18,11 +18,8 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS groups (
         group_id INTEGER PRIMARY KEY,
         group_name TEXT,
-<<<<<<< HEAD
         group_admin INTEGER
-=======
         group_admin TEXT
->>>>>>> 5b93596891c0da279334069535f49c9eb2e22931
     )
 ''')
 
@@ -32,7 +29,8 @@ cursor.execute('''
         member_id INTEGER PRIMARY KEY,
         member_name TEXT,
         group_name TEXT,
-        member_status TEXT
+        member_status TEXT,
+        deadline TEXT
     )
 ''')
 

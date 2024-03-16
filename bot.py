@@ -5,9 +5,10 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.dispatcher import FSMContext
 from states import States
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ContentTypes
 import random
 import string
+import asyncio
 
 
 # Configure logging
@@ -24,6 +25,25 @@ group = {}
 conn = sqlite3.connect("database.db")
 cursor = conn.cursor()
 
+# Function to set the deadline in the members table
+def set_deadline_in_database(member_id, deadline_time):
+    cursor.execute("UPDATE members SET deadline = ?, member_status = ? WHERE member_id = ?", (deadline_time, "active", member_id))
+    conn.commit()
+
+# Function to check if a task deadline has expired
+async def check_deadline():
+    while True:
+        cursor.execute("SELECT member_id, deadline FROM members WHERE deadline IS NOT NULL")
+        tasks = cursor.fetchall()
+        for member_id, deadline_str in tasks:
+            deadline_time = datetime.datetime.strptime(deadline_str, '%Y-%m-%d %H:%M:%S')
+            if datetime.datetime.now() >= deadline_time:
+                await bot.send_message(chat_id=member_id, text="The deadline for your task has expired!")
+                # Optionally, you can clear the deadline in the database after it expires
+                cursor.execute("UPDATE members SET deadline = NULL WHERE member_id = ?", (member_id,))
+                conn.commit()
+        # Check every hour
+        await asyncio.sleep(3600)
 
 
 
@@ -405,7 +425,8 @@ async def create_task(message: types.Message, state: FSMContext):
 
     yes = types.KeyboardButton("Yes")
     no = types.KeyboardButton("No")
-    await message.answer("Ok you have some Technical task")
+    keyboard.add(yes, no)
+    await message.answer("Ok you have some Technical task", reply_markup=keyboard)
 
 
 @dp.message_handler(lambda message: message.text == "Yes")
@@ -420,22 +441,136 @@ async def save_task(message: types.Message, state: FSMContext):
     task['task'] = message.text
 
     await message.answer("Enter the subject of the task")
+    await state.set_state(States.tester)
 
+
+@dp.message_handler(state=States.tester)
+async def tester(message: types.Message, state: FSMContext):
+        group_name = group["group_name"]
+        task['task_subject'] = message.text
+        cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
+
+        all_grups = cursor.fetchall()
+
+        keyboard = InlineKeyboardMarkup()
+        for row in all_grups:
+            button = InlineKeyboardButton(text=row[0], callback_data=f"tester_{row[0]}")
+            print(button.callback_data)
+            keyboard.add(button)
+
+        await message.answer("Please select tester:", reply_markup=keyboard)
+        await state.set_state(States.change_tester)
+
+
+@dp.callback_query_handler(state=States.change_tester)
+async def send_msg_to_tester(callback: types.CallbackQuery, state: FSMContext):
+    global tester_
+    task_ = task["task_subject"]
+    tester_name = callback.data.split('_')[1]
+
+    cursor.execute("SELECT member_id FROM members WHERE member_name = ?", (tester_name,)) 
+    tester_ = cursor.fetchone()
+    
+    if tester_:
+        await bot.send_message(chat_id=tester_[0], text=f"You are tester for this task {task_}")
+        await callback.message.delete()
+        await state.set_state(States.task_subject)   # Set the next state here
+    else:
+        print("Tester not found")
 
 @dp.message_handler(state=States.task_subject)
-async def task_subject(message: types.Message):
+async def task_subject(message: types.Message, state: FSMContext):
+    group_name = group["group_name"]
     task['task_subject'] = message.text
-    cursor.execute("SELECT member_name FROM members WHERE group_name = ?", (group_name,))
+    cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
     all_grups = cursor.fetchall()
 
     keyboard = InlineKeyboardMarkup()
     for row in all_grups:
-        button = InlineKeyboardButton(text=row[0], callback_data=f"{row[0]}")
+        button = InlineKeyboardButton(text=row[0], callback_data=f"worker_{row[0]}")
         keyboard.add(button)
 
     await message.answer("Please select member:", reply_markup=keyboard)
-
     
+@dp.callback_query_handler(lambda query: query.data.startswith('worker_'))
+async def join_group(callback_query: CallbackQuery, state: FSMContext):
+    print(callback_query.data)
+    global worker_name
+    worker_name = callback_query.data.split('_')[1]
+    
+    await callback_query.message.answer("Please write a task for the employee")
+
+    await state.set_state(States.write_task_for_employe)
+
+@dp.message_handler(state=States.write_task_for_employe)
+async def write_employe(message: types.Message, state: FSMContext):
+    task[f'employe_to_{worker_name}'] = message.text
+
+    await message.answer(f"Please set a deadline for {worker_name}")
+    await state.set_state(States.deadline)
+import datetime
+
+async def start_deadline_checking():
+    await check_deadline()
+
+
+
+
+@dp.message_handler(state=States.deadline)
+async def deadline(message: types.Message, state: FSMContext):
+    try:
+        task_ = task['task']
+        task_to_employe = task[f'employe_to_{worker_name}']
+        deadline_str = message.text
+        deadline_datetime = datetime.datetime.strptime(deadline_str, '%y-%m-%d-%H')
+        deadline_time = deadline_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        
+        if task_:
+            cursor.execute("SELECT member_id FROM members WHERE member_name = ? AND member_status = ?", (worker_name, "empty"))
+            worker_id = cursor.fetchone() 
+            set_deadline_in_database(worker_id[0], deadline_time)
+            
+            await bot.send_message(chat_id=worker_id[0], text=f"Technical task: {task_}\n\nYour task: {task_to_employe}\n\nDeadline: {deadline_time}")
+        else: 
+            cursor.execute("SELECT member_id, member_name FROM members WHERE member_status = ?", ("empty",))
+            available_workers = cursor.fetchall()
+            
+            keyboard = InlineKeyboardMarkup()
+            for row in available_workers:
+                button = InlineKeyboardButton(text=row[1], callback_data=f"worker_{row[1]}")
+                keyboard.add(button)
+            
+            await message.answer("Please select another worker:", reply_markup=keyboard)
+            await state.set_state(States.task_subject)
+            return
+        
+        await message.answer(f"Deadline set to: {deadline_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+        await asyncio.create_task(start_deadline_checking())
+        await state.finish()
+        
+    except ValueError:
+        await message.answer("Invalid format for the deadline. Please use yy-mm-dd-hh.")
+
+
+@dp.message_handler(content_types=ContentTypes.DOCUMENT)
+async def handle_message(message: types.Message):
+    group_name = group["group_name"]
+    user_id = message.from_user.id
+    doument = message.document
+
+    # Check if the message is related to a task
+    cursor.execute("SELECT member_id, deadline FROM members WHERE member_id = ? AND deadline IS NOT NULL AND group_name = ?", (user_id, group_name))
+    task_info = cursor.fetchone()
+
+    if task_info:
+
+        # If the message is related to a task, stop the timer for that task
+        cursor.execute("UPDATE members SET deadline = NULL, member_status = ? WHERE member_id = ?", ('empty', user_id,))
+        conn.commit()
+        await bot.send_message(chat_id=user_id, text="You've interacted with the task. Timer stopped.")
+        await bot.send_document(chat_id=tester_, document=doument)
+
+
 
 
 # Start the bot with the executor   

@@ -18,3 +18,7 @@ class States(StatesGroup):
     team_name = State()
     technical_task = State()
     task_subject = State()
+    write_task_for_employe = State()
+    deadline = State()
+    tester = State()
+    change_tester = State()
