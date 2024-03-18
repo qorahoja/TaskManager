@@ -49,7 +49,7 @@ async def check_deadline():
 
 def generate_token(group_name):
     random_part = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
-    return f"https://t.me/TaskTrackrBot?start={group_name}_{random_part}"
+    return f"https://t.me/TaskTrackrBot?start={group_name}_{random_part}".replace(' ', '-')
 
 
 
@@ -59,20 +59,21 @@ async def start(message: types.Message):
     user_id = message.from_user.id
 
     if message.get_args():
-        cursor.execute("SELECT group_admin FROM groups")
+        group_name = message.get_args().split('_')[0].replace('-', ' ')
+        cursor.execute("SELECT group_admin FROM groups WHERE group_name = ?", (group_name,))
         all_admins = cursor.fetchall()
         for row_admins in all_admins:
             if user_id == row_admins[0]:
                 await message.answer("You are admin this group")
             else:
-                group_name = message.get_args().split('_')[0]
+                
                 member_name  = message.from_user.first_name
                 member_id = message.from_user.id
         
-                cursor.execute("INSERT INTO members (member_id, member_name, group_name) VALUES (?, ?, ?)", (member_id, member_name, group_name,))
+                cursor.execute("INSERT INTO members (member_id, member_name, group_name, member_status) VALUES (?, ?, ?, ?)", (member_id, member_name, group_name, 'empty',))
                 conn.commit()
 
-        await message.answer(f"Welcome new member you have to joined to {group_name}")
+                await message.answer(f"Welcome new member you have to joined to {group_name}")
     else:
         user_name = message.from_user.first_name
 
@@ -111,7 +112,8 @@ async def register(message: types.Message, state: FSMContext):
 # Name message handler
 @dp.message_handler(state=States.name)
 async def name(message: types.Message, state: FSMContext):
-    await message.reply("Please enter your password📟")
+    remove_markup = types.ReplyKeyboardRemove()
+    await message.reply("Please enter your password📟", reply_markup=remove_markup)
     await state.update_data(name=message.text)
     await States.next()
 
@@ -146,10 +148,14 @@ async def login(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
     existing_user = cursor.fetchone()
+    remove_markup = types.ReplyKeyboardRemove()
 
     if existing_user:
-        await message.answer("Please enter your password: ")
+        await message.answer("Please enter your password: ", reply_markup=remove_markup)
         await state.set_state(States.login_pass)
+
+    else:
+        await message.answer("You are not registered")
 
 @dp.message_handler(state=States.login_pass)
 async def login_pass(message: types.Message, state: FSMContext):
@@ -167,6 +173,7 @@ async def login_pass(message: types.Message, state: FSMContext):
         await message.answer("Welcome Back!", reply_markup=keyboard)
         await state.finish()
     else:
+        
         await message.answer("Please try again")
         await state.set_state(States.try_1)
 
@@ -181,8 +188,9 @@ async def login_pass(message: types.Message, state: FSMContext):
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         create_grup = types.KeyboardButton("Create group 👥")
         settings = types.KeyboardButton("Settings ⚙")
+        my_groups = types.KeyboardButton("My Groups")
         
-        keyboard.add(create_grup, settings)
+        keyboard.add(create_grup, settings, my_groups)
         await message.answer("Welcome Back!", reply_markup=keyboard)
         await state.finish()
     else:
@@ -199,8 +207,9 @@ async def login_pass(message: types.Message, state: FSMContext):
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         create_grup = types.KeyboardButton("Create grup 👥")
         settings = types.KeyboardButton("Settings ⚙")
+        my_groups = types.KeyboardButton("My Groups")
         
-        keyboard.add(create_grup, settings)
+        keyboard.add(create_grup, settings, my_groups)
         await message.answer("Welcome Back!", reply_markup=keyboard)
         await state.finish()
     else:
@@ -236,7 +245,7 @@ async def reset_with_group_name(message: types.Message, state: FSMContext):
     group_name = message.text
     user_id = message.from_user.id
 
-    cursor.execute("SELECT group_name FROM groups WHERE group_admin = ?", (user_id))
+    cursor.execute("SELECT group_name FROM groups WHERE group_admin = ?", (user_id,))
     correct_group_name = cursor.fetchall()
 
     for all_grup_names in correct_group_name:
@@ -302,9 +311,20 @@ async def old_name_for_reset(message: types.Message, state: FSMContext):
         await message.answer("Please enter your new password")
         await state.set_state(States.new_pass)
     else:
-        await message.answer("Invalid name")
-        await state.finish()
+            keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            register_button = types.KeyboardButton("Register 👥")
+            login_button = types.KeyboardButton("Login 👤")
+            keyboard.add(register_button, login_button)
+            await message.answer("I think you did not remember the name of your group, please try to restore it with your name", reply_markup=keyboard)
+            await state.finish()
 
+
+@dp.message_handler(state=States.new_pass)
+async def new_pass(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    new_pass = message.text
+
+    cursor.execute("UPDATE users SET user_pass = ? WHERE member_id", (new_pass, user_id))
 
 @dp.message_handler(lambda message: message.text == 'No 🚫')
 async def no(message: types.Message, state: FSMContext):
@@ -356,7 +376,7 @@ async def join_group(callback_query: CallbackQuery):
     add_member = types.KeyboardButton("Add member ➕")
     members = types.KeyboardButton("Members 🫂")
     create_task = types.KeyboardButton("Create Task")
-    keyboard.add(add_member, members)
+    keyboard.add(add_member, members, create_task)
 
 
 
@@ -431,7 +451,8 @@ async def create_task(message: types.Message, state: FSMContext):
 
 @dp.message_handler(lambda message: message.text == "Yes")
 async def technical_task(message: types.Message, state: FSMContext):
-    await message.answer("Please enter your Technical task")
+    remove_markup = types.ReplyKeyboardRemove()
+    await message.answer("Please enter your Technical task", reply_markup=remove_markup)
     await state.set_state(States.technical_task)
 
 task = {}
@@ -451,18 +472,21 @@ async def tester(message: types.Message, state: FSMContext):
         cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
 
         all_grups = cursor.fetchall()
+        print(all_grups)
 
         keyboard = InlineKeyboardMarkup()
         for row in all_grups:
+            print(row)
             button = InlineKeyboardButton(text=row[0], callback_data=f"tester_{row[0]}")
             print(button.callback_data)
             keyboard.add(button)
-
+ 
         await message.answer("Please select tester:", reply_markup=keyboard)
-        await state.set_state(States.change_tester)
+        await state.finish()
+        
 
 
-@dp.callback_query_handler(state=States.change_tester)
+@dp.callback_query_handler(lambda query: query.data.startswith('tester_'))
 async def send_msg_to_tester(callback: types.CallbackQuery, state: FSMContext):
     global tester_
     task_ = task["task_subject"]
@@ -474,24 +498,90 @@ async def send_msg_to_tester(callback: types.CallbackQuery, state: FSMContext):
     if tester_:
         await bot.send_message(chat_id=tester_[0], text=f"You are tester for this task {task_}")
         await callback.message.delete()
-        await state.set_state(States.task_subject)   # Set the next state here
+
+        group_name = group["group_name"]
+        task['task_subject'] = callback.message.text
+        cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
+        all_grups = cursor.fetchall()
+
+        keyboard = InlineKeyboardMarkup()
+        for row in all_grups:
+            button = InlineKeyboardButton(text=row[0], callback_data=f"worker_{row[0]}")
+            keyboard.add(button)
+
+        await callback.message.answer("Please select member:", reply_markup=keyboard)
+        await state.finish()
+           # Set the next state here
     else:
         print("Tester not found")
 
-@dp.message_handler(state=States.task_subject)
-async def task_subject(message: types.Message, state: FSMContext):
-    group_name = group["group_name"]
-    task['task_subject'] = message.text
-    cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
-    all_grups = cursor.fetchall()
 
-    keyboard = InlineKeyboardMarkup()
-    for row in all_grups:
-        button = InlineKeyboardButton(text=row[0], callback_data=f"worker_{row[0]}")
-        keyboard.add(button)
-
-    await message.answer("Please select member:", reply_markup=keyboard)
     
+
+import datetime
+
+async def start_deadline_checking():
+    await check_deadline()
+
+
+
+
+@dp.message_handler(state=States.deadline)
+async def deadline(message: types.Message, state: FSMContext):
+    try:
+        group_name = group["group_name"]
+  
+        global deadline_time
+
+        # Extract worker details and deadline from the message
+        task_ = task['task']
+        task_to_employe = task[f'employe_to_{worker_name}']
+        deadline_str = message.text
+        deadline_datetime = datetime.datetime.strptime(deadline_str, '%y-%m-%d-%H')
+        deadline_time = deadline_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+        if task_:
+            # Set the deadline for the current worker
+            cursor.execute("SELECT member_id FROM members WHERE member_name = ? AND member_status = ?", (worker_name, "empty"))
+            worker_id = cursor.fetchone() 
+            set_deadline_in_database(worker_id[0], deadline_time)
+
+            # Send task details to the current worker
+            await bot.send_message(chat_id=worker_id[0], text=f"Technical task: {task_}\n\nYour task: {task_to_employe}\n\nDeadline: {deadline_time}")
+
+            # Check if there are more empty workers available
+            cursor.execute("SELECT member_id FROM members WHERE member_status = ?", ("empty",))
+            next_worker = cursor.fetchone()
+
+            if next_worker:
+                cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
+                all_grups = cursor.fetchall()
+
+                keyboard = InlineKeyboardMarkup()
+                for row in all_grups:
+                    button = InlineKeyboardButton(text=row[0], callback_data=f"worker_{row[0]}")
+                    keyboard.add(button)
+                # If there are more empty workers, select the next worker
+                await message.answer("Please select next worker:", reply_markup=keyboard)
+                await state.finish()
+                
+            else:
+                # If all workers are assigned tasks, consider the task as created
+                await message.answer("All workers are assigned tasks. Task created.")
+                await state.finish()
+        else:
+            await message.answer("Task details are missing.")
+            await state.finish()
+
+        # Send the message about the deadline
+        await message.answer(f"Deadline set to: {deadline_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Start checking the deadline
+        await asyncio.create_task(start_deadline_checking())
+
+    except ValueError:
+        await message.answer("Invalid format for the deadline. Please use yy-mm-dd-hh.")
+
 @dp.callback_query_handler(lambda query: query.data.startswith('worker_'))
 async def join_group(callback_query: CallbackQuery, state: FSMContext):
     print(callback_query.data)
@@ -508,67 +598,69 @@ async def write_employe(message: types.Message, state: FSMContext):
 
     await message.answer(f"Please set a deadline for {worker_name}")
     await state.set_state(States.deadline)
-import datetime
-
-async def start_deadline_checking():
-    await check_deadline()
-
-
-
-
-@dp.message_handler(state=States.deadline)
-async def deadline(message: types.Message, state: FSMContext):
-    try:
-        task_ = task['task']
-        task_to_employe = task[f'employe_to_{worker_name}']
-        deadline_str = message.text
-        deadline_datetime = datetime.datetime.strptime(deadline_str, '%y-%m-%d-%H')
-        deadline_time = deadline_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        
-        if task_:
-            cursor.execute("SELECT member_id FROM members WHERE member_name = ? AND member_status = ?", (worker_name, "empty"))
-            worker_id = cursor.fetchone() 
-            set_deadline_in_database(worker_id[0], deadline_time)
-            
-            await bot.send_message(chat_id=worker_id[0], text=f"Technical task: {task_}\n\nYour task: {task_to_employe}\n\nDeadline: {deadline_time}")
-        else: 
-            cursor.execute("SELECT member_id, member_name FROM members WHERE member_status = ?", ("empty",))
-            available_workers = cursor.fetchall()
-            
-            keyboard = InlineKeyboardMarkup()
-            for row in available_workers:
-                button = InlineKeyboardButton(text=row[1], callback_data=f"worker_{row[1]}")
-                keyboard.add(button)
-            
-            await message.answer("Please select another worker:", reply_markup=keyboard)
-            await state.set_state(States.task_subject)
-            return
-        
-        await message.answer(f"Deadline set to: {deadline_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
-        await asyncio.create_task(start_deadline_checking())
-        await state.finish()
-        
-    except ValueError:
-        await message.answer("Invalid format for the deadline. Please use yy-mm-dd-hh.")
-
 
 @dp.message_handler(content_types=ContentTypes.DOCUMENT)
-async def handle_message(message: types.Message):
+async def handle_message(message: types.Message, state: FSMContext):
     group_name = group["group_name"]
     user_id = message.from_user.id
-    doument = message.document
+    document = message.document
 
     # Check if the message is related to a task
-    cursor.execute("SELECT member_id, deadline FROM members WHERE member_id = ? AND deadline IS NOT NULL AND group_name = ?", (user_id, group_name))
-    task_info = cursor.fetchone()
+    try:
+        cursor.execute("SELECT member_id, deadline FROM members WHERE member_id = ? AND deadline IS NOT NULL AND group_name = ?", (user_id, group_name))
+        task_info = cursor.fetchone()
 
-    if task_info:
 
-        # If the message is related to a task, stop the timer for that task
-        cursor.execute("UPDATE members SET deadline = NULL, member_status = ? WHERE member_id = ?", ('empty', user_id,))
-        conn.commit()
-        await bot.send_message(chat_id=user_id, text="You've interacted with the task. Timer stopped.")
-        await bot.send_document(chat_id=tester_, document=doument)
+        if task_info:
+            keyboard = InlineKeyboardMarkup()
+            # If the message is related to a task, stop the timer for that task
+            cursor.execute("UPDATE members SET deadline = NULL, member_status = ? WHERE member_id = ?", ('empty', user_id,))
+            conn.commit()
+            await bot.send_message(chat_id=user_id, text="You've interacted with the task. Timer stopped.")
+            accept = InlineKeyboardButton(text="Accept", callback_data=f"accept_{user_id}")
+            decline = InlineKeyboardButton(text="Decline", callback_data=f"decline_{user_id}")
+            keyboard.add(accept, decline)
+            # Send the document using its file_id
+            await bot.send_document(chat_id=tester_[0], document=document.file_id, reply_markup=keyboard)
+            await state.finish()
+        else:
+            await bot.send_message(chat_id=user_id, text="No task found for you in this group.")
+    except Exception as e:
+        # Handle exceptions, log errors, or notify administrators
+        print(f"An error occurred: {e}")
+
+
+@dp.callback_query_handler(lambda query: query.data.startswith('accept_'), state="*")
+async def accept(query: types.CallbackQuery):
+    print("Hasd")
+    await query.message.answer("Thanks for checking")
+    idx = query.data.split('_')[1]
+    await query.message.delete()
+
+    await bot.send_message(chat_id=idx, text="Your work has been successfully verified")
+
+@dp.callback_query_handler(lambda query: query.data.startswith('decline_'), state="*")
+async def decline(query: types.CallbackQuery, state: FSMContext):
+    global idx
+    await query.message.answer("Please provide information about the detected error")
+    idx = query.data.split('_')[1]
+
+    await state.set_state(States.decline)
+
+@dp.message_handler(state=States.decline)
+async def decline_message(message: types.Message, state: FSMContext):
+    information = message.text
+    user_id = message.from_user.id
+    await bot.send_message(chat_id=idx, text=f"Task declined.\n\nReason: {information}. Task reset.")
+    await bot.send_message(chat_id=idx, text="Please proceed with the task again.")
+
+    # Reset the deadline for the task
+    cursor.execute("UPDATE members SET deadline = NULL, member_status = ? WHERE member_id = ?", ('active', idx))
+    conn.commit()
+    set_deadline_in_database(idx, deadline_time)
+
+    await asyncio.create_task(start_deadline_checking())
+    await state.finish()
 
 
 

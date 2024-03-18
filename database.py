@@ -8,8 +8,8 @@ cursor = conn.cursor()
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
-        user_name TEXT NOT NULL,
-        user_pass TEXT NOT NULL
+        user_name TEXT,
+        user_pass TEXT
     )
 ''')
 
@@ -19,7 +19,6 @@ cursor.execute('''
         group_id INTEGER PRIMARY KEY,
         group_name TEXT,
         group_admin INTEGER
-        group_admin TEXT
     )
 ''')
 

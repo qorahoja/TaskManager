@@ -21,4 +21,6 @@ class States(StatesGroup):
     write_task_for_employe = State()
     deadline = State()
     tester = State()
+    select_member = State()
     change_tester = State()
+    decline = State()
