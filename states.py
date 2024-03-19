@@ -24,3 +24,4 @@ class States(StatesGroup):
     select_member = State()
     change_tester = State()
     decline = State()
+    point = State()

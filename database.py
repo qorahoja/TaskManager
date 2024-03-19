@@ -27,11 +27,39 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS members (
         member_id INTEGER PRIMARY KEY,
         member_name TEXT,
+        rank_member TEXT,
         group_name TEXT,
         member_status TEXT,
         deadline TEXT
     )
 ''')
+
+cursor.execute('''
+            CREATE TABLE IF NOT EXISTS history(
+               group_name TEXT,
+               group_admin_id INTEGER,
+               task_subject TEXT,
+               started TEXT,
+               finished TEXT               
+            )
+
+
+''')
+
+
+cursor.execute('''
+            CREATE TABLE IF NOT EXISTS workers_worked_tasks(
+               worker_id INTEGER,
+               group_name TEXT,
+               point_for_this_task INTEGER,
+               task_subject TEXT
+            )
+
+
+''')
+
+
+
 
 # Create Admins table
 cursor.execute('''

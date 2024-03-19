@@ -9,6 +9,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 import random
 import string
 import asyncio
+import datetime
 
 
 # Configure logging
@@ -25,11 +26,46 @@ group = {}
 conn = sqlite3.connect("database.db")
 cursor = conn.cursor()
 
+async def calculate_total_points_and_mark_silver():
+    # Connect to the database
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    # Retrieve all member_ids and their corresponding total points
+    cursor.execute("SELECT worker_id, SUM(point_for_this_task) FROM workers_worked_tasks GROUP BY worker_id")
+    results = cursor.fetchall()
+
+    # Update members to mark as silver if total points exceed 20
+    for member_id, total_points in results:
+        if total_points > 20:
+            cursor.execute("UPDATE members SET rank_member = 'silver' WHERE member_id = ?", (member_id,))
+
+    # Commit the changes to the database
+    conn.commit()
+
+    # Close the cursor and connection
+    cursor.close()
+    conn.close()
+
+async def periodic_task(interval):
+    while True:
+        await calculate_total_points_and_mark_silver()
+        await asyncio.sleep(interval)
+
+async def main():
+    interval = 20 * 60  # 20 minutes in seconds
+    await periodic_task(interval)
+
+
+
 # Function to set the deadline in the members table
 def set_deadline_in_database(member_id, deadline_time):
     cursor.execute("UPDATE members SET deadline = ?, member_status = ? WHERE member_id = ?", (deadline_time, "active", member_id))
     conn.commit()
-
+    
+def set_info_to_workers_worked_tasks(member_id, group_name, point, subject):
+    cursor.execute("INSERT INTO workers_worked_tasks (worker_id, group_name, point_for_this_task, task_subject) VALUES (?, ?, ?, ?)", (member_id, group_name, point, subject,))
+    conn.commit()
 # Function to check if a task deadline has expired
 async def check_deadline():
     while True:
@@ -70,7 +106,7 @@ async def start(message: types.Message):
                 member_name  = message.from_user.first_name
                 member_id = message.from_user.id
         
-                cursor.execute("INSERT INTO members (member_id, member_name, group_name, member_status) VALUES (?, ?, ?, ?)", (member_id, member_name, group_name, 'empty',))
+                cursor.execute("INSERT INTO members (member_id, member_name, group_name, member_status, rank_member) VALUES (?, ?, ?, ?, ?)", (member_id, member_name, group_name, 'empty', 'bronze'))
                 conn.commit()
 
                 await message.answer(f"Welcome new member you have to joined to {group_name}")
@@ -367,7 +403,7 @@ async def my_groups(message: types.Message, state: FSMContext):
 
 @dp.callback_query_handler(lambda query: query.data.startswith('group_'))
 async def join_group(callback_query: CallbackQuery):
-    
+    global group_name
     group_name = callback_query.data.split('_')[1]  # Extract the group name from the callback data
     user_id = callback_query.from_user.id
     group.clear()
@@ -376,7 +412,8 @@ async def join_group(callback_query: CallbackQuery):
     add_member = types.KeyboardButton("Add member ➕")
     members = types.KeyboardButton("Members 🫂")
     create_task = types.KeyboardButton("Create Task")
-    keyboard.add(add_member, members, create_task)
+    history_of_tasks = types.KeyboardButton("History")
+    keyboard.add(add_member, members, create_task, history_of_tasks)
 
 
 
@@ -405,6 +442,120 @@ async def members(message: types.Message, state: FSMContext):
         keyboard.add(button)
 
     await message.answer("Members:", reply_markup=keyboard)
+
+
+import math
+# Define tasks_per_page as a global constant
+TASKS_PER_PAGE = 10
+
+@dp.message_handler(lambda message: message.text == "History")
+async def history(message: types.Message, state: FSMContext):
+    group_name = group["group_name"]
+    admin_id = message.from_user.id
+
+    cursor.execute("SELECT COUNT(*) FROM history WHERE group_name = ? AND group_admin_id = ?", (group_name, admin_id,))
+    total_tasks = cursor.fetchone()[0]  # Fetch the count of tasks
+    
+    # Calculate total pages
+    total_pages = math.ceil(total_tasks / TASKS_PER_PAGE)
+
+    # Extracting page number from the state
+    current_page = 1
+    async with state.proxy() as data:
+        if "page" in data:
+            current_page = data["page"]
+
+    # Querying tasks for the current page
+    offset = (current_page - 1) * TASKS_PER_PAGE
+    cursor.execute("SELECT task_subject, started, finished FROM history WHERE group_name = ? AND group_admin_id = ? LIMIT ? OFFSET ?", (group_name, admin_id, TASKS_PER_PAGE, offset))
+    tasks_history = cursor.fetchall()
+    
+    response_message = f"Total tasks: {total_tasks}\n\nTask History:\n"
+    
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    
+    task_number = offset + 1
+    for task in tasks_history:
+        task_subject = task[0]
+        started_time_str = task[1]
+        finished_time_str = task[2]
+
+        # Convert string representations to datetime objects
+        started_time = datetime.datetime.fromisoformat(started_time_str)
+        finished_time = datetime.datetime.fromisoformat(finished_time_str)
+
+        # Calculate task duration
+        task_duration = finished_time - started_time
+
+        # Format task duration
+        formatted_duration = str(task_duration).split('.')[0]  # Extracting hours, minutes, and seconds only
+
+        response_message += f"Task {task_number}: {task_subject}\nDuration: {formatted_duration}\n\n"
+        callback_data = f"task_{task_subject}"
+        button_text = f"{task_number}"
+        keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
+        task_number += 1
+        
+
+    # Add "Next" button if there are more pages
+    if total_pages > current_page:
+        keyboard.add(InlineKeyboardButton("Next", callback_data="next_page"))
+        
+    # Add "Back" button if current page is greater than 1
+    if current_page > 1:
+        keyboard.add(InlineKeyboardButton("Back", callback_data="back_page"))
+
+    await message.answer(response_message, reply_markup=keyboard)
+
+@dp.callback_query_handler(lambda call: call.data in ('next_page', 'back_page'))
+async def page_navigation(callback: types.CallbackQuery, state: FSMContext):
+    admin_id = callback.from_user.id
+    task_number = 1
+    async with state.proxy() as data:
+        current_page = data.get("page", 1)
+        if callback.data == 'next_page':
+            offset = current_page * TASKS_PER_PAGE
+            data["page"] = current_page + 1
+        else:  # Handle "Back" button
+            offset = (current_page - 2) * TASKS_PER_PAGE
+            data["page"] = current_page - 1
+        
+        cursor.execute("SELECT task_subject, started, finished FROM history WHERE group_name = ? AND group_admin_id = ? LIMIT ? OFFSET ?", (group_name, admin_id, TASKS_PER_PAGE, offset))
+        tasks_history = cursor.fetchall()
+        
+        response_message = "Next Page:\n\n" if callback.data == 'next_page' else "Previous Page:\n\n"
+        keyboard = InlineKeyboardMarkup(row_width=5)  # Initialize keyboard for inline buttons
+        
+        for task in tasks_history:
+            task_subject = task[0]
+            started_time_str = task[1]
+            finished_time_str = task[2]
+    
+            started_time = datetime.datetime.fromisoformat(started_time_str)
+            finished_time = datetime.datetime.fromisoformat(finished_time_str)
+    
+            task_duration = finished_time - started_time
+            formatted_duration = str(task_duration).split('.')[0]
+    
+            response_message += f"Task: {task_subject}\nDuration: {formatted_duration}\n\n"
+            callback_data = f"task_{task_subject}"
+            button_text = f"{task_number}"
+            task_number += 1
+            keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))  # Add button for each task
+        
+        if current_page > 1:
+            keyboard.add(InlineKeyboardButton("Back", callback_data="back_page"))  # Add "Back" button if current page is greater than 1
+        
+        # Add "Next" button if there are more pages
+        total_tasks = cursor.execute("SELECT COUNT(*) FROM history WHERE group_name = ? AND group_admin_id = ?", (group_name, admin_id,)).fetchone()[0]
+        total_pages = math.ceil(total_tasks / TASKS_PER_PAGE)
+        if current_page < total_pages:
+            keyboard.add(InlineKeyboardButton("Next", callback_data="next_page"))
+    
+    await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=response_message, reply_markup=keyboard)
+
+
+
 
 member = {}
 
@@ -451,6 +602,7 @@ async def create_task(message: types.Message, state: FSMContext):
 
 @dp.message_handler(lambda message: message.text == "Yes")
 async def technical_task(message: types.Message, state: FSMContext):
+    
     remove_markup = types.ReplyKeyboardRemove()
     await message.answer("Please enter your Technical task", reply_markup=remove_markup)
     await state.set_state(States.technical_task)
@@ -459,16 +611,21 @@ task = {}
 
 @dp.message_handler(state=States.technical_task)
 async def save_task(message: types.Message, state: FSMContext):
+    
     task['task'] = message.text
-
+    
     await message.answer("Enter the subject of the task")
     await state.set_state(States.tester)
 
 
 @dp.message_handler(state=States.tester)
 async def tester(message: types.Message, state: FSMContext):
+        admin_id = message.from_user.id
         group_name = group["group_name"]
         task['task_subject'] = message.text
+        print(message.text)
+        cursor.execute("INSERT INTO history (group_name, group_admin_id, task_subject, started) VALUES (?, ?, ?, ?)", (group_name, admin_id, message.text, datetime.datetime.now(),))
+        conn.commit()
         cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
 
         all_grups = cursor.fetchall()
@@ -496,11 +653,17 @@ async def send_msg_to_tester(callback: types.CallbackQuery, state: FSMContext):
     tester_ = cursor.fetchone()
     
     if tester_:
-        await bot.send_message(chat_id=tester_[0], text=f"You are tester for this task {task_}")
+        cursor.execute("UPDATE members SET member_status = ?, deadline = ? WHERE member_name = ?", ("as_TESTER", "Tester", tester_name,))
+
+        conn.commit()
+        keyboard_finsh = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        finish_button = types.KeyboardButton("Task finish")
+        keyboard_finsh.add(finish_button)
+        await bot.send_message(chat_id=tester_[0], text=f"You are tester for this task {task_}", reply_markup=keyboard_finsh)
         await callback.message.delete()
 
         group_name = group["group_name"]
-        task['task_subject'] = callback.message.text
+     
         cursor.execute("SELECT member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, "empty",))
         all_grups = cursor.fetchall()
 
@@ -509,16 +672,44 @@ async def send_msg_to_tester(callback: types.CallbackQuery, state: FSMContext):
             button = InlineKeyboardButton(text=row[0], callback_data=f"worker_{row[0]}")
             keyboard.add(button)
 
-        await callback.message.answer("Please select member:", reply_markup=keyboard)
+        await callback.message.answer("Please select worker:", reply_markup=keyboard)
         await state.finish()
            # Set the next state here
     else:
         print("Tester not found")
 
 
-    
 
-import datetime
+@dp.message_handler(lambda message: message.text == 'Task finish')
+async def task_finished(message: types.Message, state: FSMContext):
+    group_name_tester = group["group_name"]
+    subject = task["task_subject"]
+    print(group_name_tester)  # Ensure this prints the expected value
+
+    tester_id = message.from_user.id
+
+    cursor.execute("SELECT member_id FROM members WHERE deadline = ? AND group_name = ?", ("Tester", group_name_tester))
+    check_tester = cursor.fetchone()
+
+    if check_tester is not None and check_tester[0] == tester_id:
+        cursor.execute("SELECT member_status, member_name FROM members WHERE group_name = ? AND member_status = ?", (group_name, 'active'))
+        active = cursor.fetchall()
+        
+        if active:
+            for row in active:
+                await message.answer(f"We have workers who have not completed their tasks yet\n\nNames {row[1]}")
+        else:
+            cursor.execute("UPDATE members SET member_status = ?, deadline = NULL WHERE deadline = ?", ("empty", "Tester",))
+            conn.commit()
+            cursor.execute("UPDATE history SET finished = ? WHERE group_name = ? AND task_subject = ?", (datetime.datetime.now(), group_name, subject,))
+            conn.commit()
+            await message.answer("Task finished")
+            
+    else:
+        await message.answer("You are not assigned as a tester for this group.")
+
+
+
 
 async def start_deadline_checking():
     await check_deadline()
@@ -579,7 +770,8 @@ async def deadline(message: types.Message, state: FSMContext):
         # Start checking the deadline
         await asyncio.create_task(start_deadline_checking())
 
-    except ValueError:
+    except ValueError as e:
+        print(e)
         await message.answer("Invalid format for the deadline. Please use yy-mm-dd-hh.")
 
 @dp.callback_query_handler(lambda query: query.data.startswith('worker_'))
@@ -631,13 +823,31 @@ async def handle_message(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda query: query.data.startswith('accept_'), state="*")
-async def accept(query: types.CallbackQuery):
+async def accept(query: types.CallbackQuery, state: FSMContext):
     print("Hasd")
-    await query.message.answer("Thanks for checking")
+    global idx
+    await query.message.answer("Please rate the employee's performance from 1 to 10")
+    await state.set_state(States.point)
     idx = query.data.split('_')[1]
     await query.message.delete()
 
     await bot.send_message(chat_id=idx, text="Your work has been successfully verified")
+
+
+@dp.message_handler(state=States.point)
+async def point(message: types.Message, state: FSMContext):
+    subject = task["task_subject"]
+    print(subject)
+    group__ = group["group_name"]
+    point = message.text
+    id = idx
+
+    await message.answer("Thanks for checking")
+
+    set_info_to_workers_worked_tasks(id, group__, point, subject)
+    await state.finish()
+
+
 
 @dp.callback_query_handler(lambda query: query.data.startswith('decline_'), state="*")
 async def decline(query: types.CallbackQuery, state: FSMContext):
@@ -651,7 +861,7 @@ async def decline(query: types.CallbackQuery, state: FSMContext):
 async def decline_message(message: types.Message, state: FSMContext):
     information = message.text
     user_id = message.from_user.id
-    await bot.send_message(chat_id=idx, text=f"Task declined.\n\nReason: {information}. Task reset.")
+    await bot.send_message(chat_id=idx, text=f"Task declined.\n\nReason: {information}.")
     await bot.send_message(chat_id=idx, text="Please proceed with the task again.")
 
     # Reset the deadline for the task
@@ -668,3 +878,4 @@ async def decline_message(message: types.Message, state: FSMContext):
 # Start the bot with the executor   
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
