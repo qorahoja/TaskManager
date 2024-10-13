@@ -8,7 +8,9 @@ from states import RegistrationStates, LoginStates, NewGroupStates
 from register import start_registration, process_username as process_registration_username, process_password as process_registration_password
 from login import start_login, process_username as process_login_username, check_password as process_login_password
 from newGroup import start_new_group, process_new_group_name
+
 from myGroup import show_my_groups
+
 API_TOKEN = '7079476232:AAFiUAqn3FAVXp4P-m_Uelt4241DtDgOZp8'
 
 bot = Bot(token=API_TOKEN)
@@ -49,12 +51,14 @@ async def handle_my_groups(message: types.Message):
     await show_my_groups(message)
 
 
-
 @dp.callback_query_handler(lambda c: c.data.startswith("join_group_"))
 async def process_group_callback(callback_query: types.CallbackQuery):
-    group_id = int(callback_query.data.split("_")[2])  # Extract the group ID
-    # Logic to join the group or show group details
-    await bot.answer_callback_query(callback_query.id, text=f"You selected group ID: {group_id}")
+    from group import handle_group_selection
+    chat_id = callback_query.message.chat.id  # Get the chat ID
+    message_id = callback_query.message.message_id  # Get the message ID to delete
+    await handle_group_selection(callback_query, chat_id, message_id)
+
+
 
 if __name__ == "__main__":
     # Initialize the database

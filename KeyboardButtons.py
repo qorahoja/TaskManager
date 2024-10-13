@@ -15,3 +15,14 @@ def get_main_menu_keyboard():
     my_groups_button = KeyboardButton("My Groups")
     markup.add(new_group_button, settings_button, my_groups_button)
     return markup
+
+
+
+def create_group_action_buttons():
+    """Create buttons for actions within a selected group."""
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add("Add Member")
+    keyboard.add("Members")
+    keyboard.add("Create Task")
+    keyboard.add("History")
+    return keyboard
