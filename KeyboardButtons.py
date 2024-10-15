@@ -21,8 +21,18 @@ def get_main_menu_keyboard():
 def create_group_action_buttons():
     """Create buttons for actions within a selected group."""
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add("Add Member")
-    keyboard.add("Members")
-    keyboard.add("Create Task")
-    keyboard.add("History")
+    buttons = ["Add Member", "Members","Create Task","History", "Back"]
+  
+    keyboard.add(*buttons)
+    return keyboard
+
+
+def settings_buttons():
+    """Create buttons for settings block"""
+
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    buttons = ['1', '2']
+
+    keyboard.add(*buttons)
+
     return keyboard

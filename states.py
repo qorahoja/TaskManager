@@ -10,3 +10,8 @@ class LoginStates(StatesGroup):
 
 class NewGroupStates(StatesGroup):
     waiting_for_group_name = State()
+
+class SettingsStates(StatesGroup):
+    waiting_for_setting = State()
+    waiting_for_new_username = State()
+    waiting_for_new_password = State()

@@ -24,7 +24,8 @@ class TaskManagerDB:
                 task_description TEXT,  -- Optional
                 task_deadline TEXT NOT NULL,
                 task_participants TEXT NOT NULL,  -- Comma-separated list of user IDs
-                task_status TEXT DEFAULT 'pending'  -- e.g., pending, completed
+                task_status TEXT,
+                group_name TEXT
             )
         ''')
 
@@ -36,6 +37,24 @@ class TaskManagerDB:
                 admin_id INTEGER
             )
         ''')
+
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS hash (
+                shorted_hash TEXT UNIQUE,
+                real_hash TEXT
+            )
+        ''')
+
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS members (
+                user_id INT UNIQUE,
+                user_name TEXT,
+                group_name TEXT
+            )
+        ''')
+
 
         # Commit the changes and close the cursor
         self.conn.commit()
