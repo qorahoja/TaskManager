@@ -51,7 +51,8 @@ class TaskManagerDB:
             CREATE TABLE IF NOT EXISTS members (
                 user_id INT UNIQUE,
                 user_name TEXT,
-                group_name TEXT
+                group_name TEXT,
+                joined_data TEXT
             )
         ''')
 

@@ -114,10 +114,6 @@ async def handle_members(message: types.Message):
     await members.handle_members(message, message.from_user.id)
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("info_"))
-async def process_group_callback(callback_query: types.CallbackQuery):
-    user_id = callback_query.data.split("_")[1]
-    await action.handle_action(callback_query.message, user_id)
 
 @dp.callback_query_handler(lambda c: c.data.startswith("remove_user_"))
 async def process_removeUser_callback(callback_query: types.CallbackQuery):
@@ -127,12 +123,45 @@ async def process_removeUser_callback(callback_query: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data.startswith("history_"))
 async def process_historyUser_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.data.split("_")[1]
-    # Processing user history
-    print(user_id)
+   
+    
+    # Delete the callback query message
+    await callback_query.message.delete()
+    
+    # Correctly use chat_id to send a message
+    chat_id = callback_query.from_user.id  # Use user ID for direct messaging
+    
+    # Answering the callback to prevent the loading circle
+    await bot.answer_callback_query(callback_query.id, text="Fetching user history...")  # Add this line to acknowledge callback
+
     await action.handle_user_history(callback_query.message, callback_query.from_user.id, user_id)
 
-    # Answering the callback to prevent the loading circle
-    await bot.answer_callback_query(callback_query.id, text="Fetching user history...")
+
+@dp.callback_query_handler(lambda c: c.data.startswith("info_"))
+async def process_info_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.data.split("_")[1]
+    await action.info_user(callback_query.message, user_id)
+    
+
+@dp.message_handler(lambda message: message.text == "Back")
+async def handle_add_message(message: types.Message):
+    
+    await message.reply("Back to your dashboard!", reply_markup=keyButton.get_main_menu_keyboard())
+
+
+
+"""Finished Memebers block"""
+
+
+"""Starting Create task block"""
+
+
+
+
+
+
+
+
 
 
 

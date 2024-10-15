@@ -27,6 +27,13 @@ def create_group_action_buttons():
     return keyboard
 
 
+
+def create_back_button():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+
+    keyboard.add("Back")
+    return keyboard
+
 def settings_buttons():
     """Create buttons for settings block"""
 

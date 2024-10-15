@@ -1,6 +1,7 @@
 from aiogram import types
 from sqlcommands import TaskManagerDB
 from imports import InlineButtons, KeyboardButtons
+
 db = TaskManagerDB()
 
 async def handle_action(message: types.Message, user_id: int):
@@ -74,9 +75,12 @@ async def handle_user_history(message: types.Message, admin_id: int, user_id: in
             header = f"🎉 **Completed Tasks for User:** '{user_name}' 🎉\n"
             header += f"**Total Completed Tasks:** {total_tasks}\n\n"
             header += "-----------------------------------\n\n"
-
+            from imports import keyButton
+            back = keyButton.create_back_button()
+           
+            
             # Send the summary of tasks back to the user
-            await message.answer(f"{header}{tasks_summary}", parse_mode='Markdown')
+            await message.answer(f"{header}{tasks_summary}", parse_mode='Markdown', reply_markup=back)
             return True  # Indicate success
         else:
             print(f"No completed tasks found for user '{user_name}'.")
@@ -86,3 +90,24 @@ async def handle_user_history(message: types.Message, admin_id: int, user_id: in
         print("No group found for the given admin_id.")
         await message.answer("Group not found.")
         return None  # Handle no group found
+
+
+
+async def info_user(message: types.Message, user_id: int):
+    
+    # Fetch the user's information using user_id
+    user_info = db.get_username_with_userid(user_id)
+    print(user_info)
+    # Check if the user exists in the database
+    if user_info:
+        user_name = user_info[0].strip()
+        
+        # Send a message with user information
+        await message.answer(f"**User Information:**\n\n"
+                                                               f"**Username:** {user_name}\n"
+                                                               f"**User ID:** {user_id}",
+                                                               parse_mode='Markdown')
+    else:
+        await message.answer("User not found.")
+
+    # Always answer the callback to prevent the loading circle
