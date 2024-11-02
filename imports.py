@@ -10,7 +10,7 @@ import sqlcommands
 import add_member
 import mymembers
 import action_member
-
+import creat_newTask
 
 
 
@@ -26,3 +26,4 @@ sqlCommand = sqlcommands
 addMember = add_member
 members = mymembers
 action = action_member
+newTask = creat_newTask

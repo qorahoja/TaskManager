@@ -5,19 +5,21 @@ from aiogram.dispatcher.filters import Command
 from aiogram.utils import executor
 from sqlcommands import TaskManagerDB
 from states import RegistrationStates, LoginStates, NewGroupStates, SettingsStates
-from imports import log, reg, keyButton, InlButt, MyGr, nwGr, setting, state, sqlCommand, addMember, members, action
+from imports import log, reg, keyButton, MyGr, nwGr, setting, state, sqlCommand, addMember, members, action, newTask
 API_TOKEN = '7079476232:AAFiUAqn3FAVXp4P-m_Uelt4241DtDgOZp8'
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
+newTask.register_task_creation_handlers(dp)
+
 @dp.message_handler(commands=['start'])
 async def start_command(message: types.Message, state: FSMContext):
     args = message.get_args()
     
     if args:
-        shorted_hash = args
+        shorted_hash = args 
         decrypted_group_name = db.decrypt_string(shorted_hash)
         
         if decrypted_group_name:  
@@ -114,6 +116,10 @@ async def handle_members(message: types.Message):
     await members.handle_members(message, message.from_user.id)
 
 
+@dp.callback_query_handler(lambda c: c.data.startswith("member_"))
+async def process_group_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.data.split("_")[1]
+    await action.handle_action(callback_query.message, user_id)
 
 @dp.callback_query_handler(lambda c: c.data.startswith("remove_user_"))
 async def process_removeUser_callback(callback_query: types.CallbackQuery):
@@ -149,23 +155,6 @@ async def handle_add_message(message: types.Message):
     await message.reply("Back to your dashboard!", reply_markup=keyButton.get_main_menu_keyboard())
 
 
-
-"""Finished Memebers block"""
-
-
-"""Starting Create task block"""
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
-    # Initialize the database
     db = TaskManagerDB()
     executor.start_polling(dp, skip_updates=True)

@@ -123,7 +123,38 @@ class TaskManagerDB:
         
         return self.cursor.fetchall()
 
+    def get_group_members(self, admin_id: int):
+        """
+        Fetches the members of the group that the admin (user) manages.
+        
+        :param admin_id: The ID of the admin managing the group.
+        :return: A list of dictionaries containing member IDs and names.
+        """
+        try:
+            # Query to fetch members of the group by admin_id
+            query = """
+                SELECT user_id, user_name 
+                FROM members 
+                WHERE group_name = (SELECT group_name FROM groups WHERE admin_id = ?)
+            """
+            result = self.cursor.execute(query, (admin_id,))
+            members = result.fetchall()
+
+            if members:
+                # Return the members as a list of dictionaries
+                return [{"user_id": member[0], "name": member[1]} for member in members]
+            else:
+                return None  # No members found
+
+        except Exception as e:
+            print(f"Error fetching group members: {e}")
+            return None
+
+        
+
     
+    
+
 
     def get_user_completed_tasks(self, user_id: int):
         self.cursor.execute("""
@@ -141,15 +172,7 @@ class TaskManagerDB:
 
         return result       
 
-    # def get_user_id_by_userName(self, user_id: int):
-    #     self.cursor.execute('''
-    #         SELECT user_name FROM users WHERE user_id = ?
-    #     ''', (user_id,))
-
-    #     reslut = self.cursor.fetchone()
-
-    #     return reslut
-
+    
     def generate_encrypted_string(self, group_name):
         # Encrypt and encode the group_name
         encrypted_bytes = self.cipher_suite.encrypt(group_name.encode())
@@ -207,3 +230,58 @@ class TaskManagerDB:
     def close(self):
         self.conn.close()
 
+
+
+    def save_task_to_db(self, user_id, user_name, group_name, status, current_job, deadline, registred_data):
+        """
+        Save or update task data in the `workers` table.
+
+        :param user_id: ID of the user assigned to the task
+        :param user_name: Name of the user assigned to the task
+        :param group_name: Group name of the assigned user
+        :param status: Task status (e.g., "Assigned", "In Progress", etc.)
+        :param current_job: Description of the current job assigned to the user
+        :param deadline: Deadline for the task in days
+        """
+        try:
+            # Insert or update task data into the workers table based on user_id
+            self.cursor.execute('''
+                INSERT INTO worker (user_id, user_name, group_name, status, current_job, deadline, registred_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    user_name=excluded.user_name,
+                    group_name=excluded.group_name,
+                    status=excluded.status,
+                    current_job=excluded.current_job,
+                    deadline=excluded.deadline,
+                    registred_data=excluded.registred_data
+            ''', (user_id, user_name, group_name, status, current_job, deadline, registred_data))
+
+            # Commit the changes to the database
+            self.conn.commit()
+            print(f"Task for user {user_name} (ID: {user_id}) saved successfully.")
+        
+        except sqlite3.Error as e:
+            print(f"Error saving task to database: {e}")
+
+
+    def fetch_data_from_workers(self):
+        """Fetch all data from the workers table."""
+        self.cursor.execute("SELECT * FROM worker;")
+        rows = self.cursor.fetchall()
+        
+        # Convert rows to a list of dictionaries
+        workers_data = []
+        for row in rows:
+            worker_dict = {
+                'user_id': row[0],
+                'user_name': row[1],
+                'group_name': row[2],
+                'status': row[3],
+                'current_job': row[4],
+                'deadline': row[5],
+                'registred_data': row[6]
+            }
+            workers_data.append(worker_dict)
+        
+        return workers_data

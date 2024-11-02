@@ -22,12 +22,13 @@ class TaskManagerDB:
                 task_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task_name TEXT NOT NULL,
                 task_description TEXT,  -- Optional
-                task_deadline TEXT NOT NULL,
+                task_deadline TEXT NOT NULL,  -- Consider using a DATE type
                 task_participants TEXT NOT NULL,  -- Comma-separated list of user IDs
-                task_status TEXT,
+                task_status TEXT DEFAULT 'pending',  -- Default value for task status
                 group_name TEXT
-            )
-        ''')
+                )
+            ''')
+
 
         # Create groups table
         self.cursor.execute('''
@@ -55,6 +56,18 @@ class TaskManagerDB:
                 joined_data TEXT
             )
         ''')
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS workers (
+                user_id INT UNIQUE,
+                user_name TEXT,
+                group_name TEXT,  -- Renamed from "group"
+                status TEXT,
+                current_job TEXT,
+                deadline INT
+            )
+        ''')
+
 
 
         # Commit the changes and close the cursor
