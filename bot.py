@@ -5,6 +5,9 @@ from aiogram.dispatcher.filters import Command
 from aiogram.utils import executor
 from sqlcommands import TaskManagerDB
 from states import RegistrationStates, LoginStates, NewGroupStates, SettingsStates
+from aiogram.utils.markdown import bold, italic
+import time
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from imports import log, reg, keyButton, MyGr, nwGr, setting, state, sqlCommand, addMember, members, action, newTask
 API_TOKEN = '7079476232:AAFiUAqn3FAVXp4P-m_Uelt4241DtDgOZp8'
 
@@ -153,6 +156,129 @@ async def process_info_callback(callback_query: types.CallbackQuery):
 async def handle_add_message(message: types.Message):
     
     await message.reply("Back to your dashboard!", reply_markup=keyButton.get_main_menu_keyboard())
+
+
+
+
+
+PER_PAGE = 10  # Number of tasks per page
+def get_task_history_markup(page, total_pages, tasks_to_show):
+    buttons = []
+    row = []
+
+    for task in tasks_to_show:
+        row.append(InlineKeyboardButton(str(task['task_id']), callback_data=f"task_{task['task_id']}"))
+        if len(row) == 5:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
+
+    nav_buttons = []
+    if page > 1 or page == 1:
+        nav_buttons.append(InlineKeyboardButton("⬅ Previous", callback_data=f"group_history_{page - 1}"))
+    if page < total_pages or page == total_pages:
+        nav_buttons.append(InlineKeyboardButton("Next ➡", callback_data=f"group_history_{page + 1}"))
+
+    if nav_buttons:
+        buttons.append(nav_buttons)
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+
+@dp.message_handler(lambda message: message.text == "History")
+async def group_history(message: types.Message):
+    await message.answer("📜 Fetching group history...")
+    
+    data = db.fetch_data_from_tasks(message.from_user.id)
+    if not data:
+        await message.answer("❌ No tasks found.")
+        return
+    
+    sorted_data = sorted(data, key=lambda x: x["task_id"])  # Sort by task_id
+    total_pages = (len(sorted_data) + PER_PAGE - 1) // PER_PAGE  # Calculate total pages
+    await send_task_history(message, sorted_data, page=1, total_pages=total_pages)
+
+async def send_task_history(message, data, page, total_pages):
+    start_idx = (page - 1) * PER_PAGE
+    end_idx = start_idx + PER_PAGE
+    tasks_to_show = data[start_idx:end_idx]
+    
+    response = "📝 *Group Task History:*\n\n"
+
+
+    for idx, task in enumerate(tasks_to_show, start=start_idx + 1):
+        response += (
+            f"🔹 *Task {idx}: {bold(task['task_name'])}*\n\n"
+
+
+            f"📝 *Task description:* {italic(task['task_description'])}\n\n"
+
+
+            f"👥 Participants: {task['task_participants']}\n\n"
+
+
+            f"📌 Status: {task['task_status']}\n\n"
+
+
+            f"🏷 Group: {task['group_name']}\n\n"
+
+            f"{'-' * 30}\n\n"
+        )
+    
+    markup = get_task_history_markup(page, total_pages, tasks_to_show)
+    await message.answer(response, parse_mode="Markdown", reply_markup=markup)
+
+@dp.callback_query_handler(lambda c: c.data.startswith("group_history"))
+async def change_history_page(callback_query: types.CallbackQuery):
+    page = int(callback_query.data.split("_")[-1])
+
+    data = db.fetch_data_from_tasks(callback_query.from_user.id)
+    if not data:
+        await callback_query.answer("No tasks found.", show_alert=True)
+        return
+
+    sorted_data = sorted(data, key=lambda x: x["task_id"])
+    total_pages = (len(sorted_data) + PER_PAGE - 1) // PER_PAGE
+
+    if page < 1:
+        page = 1
+    elif page > total_pages:
+        page = total_pages
+
+    start_idx = (page - 1) * PER_PAGE
+    end_idx = start_idx + PER_PAGE
+    tasks_to_show = sorted_data[start_idx:end_idx]
+
+    if not tasks_to_show:
+        await callback_query.answer("No more tasks on this page.", show_alert=True)
+        return
+
+    response = "📝 *Group Task History:*\n\n"
+    for idx, task in enumerate(tasks_to_show, start=start_idx + 1):
+        response += (
+            f"🔹 *Task {idx}: {task['task_name']}*\n\n"
+            f"📝 *Task description:* {task['task_description']}\n\n"
+            f"👥 Participants: {task['task_participants']}\n\n"
+            f"📌 Status: {task['task_status']}\n\n"
+            f"🏷 Group: {task['group_name']}\n\n"
+            f"{'-' * 30}\n\n"
+        )
+
+    markup = get_task_history_markup(page, total_pages, tasks_to_show)
+
+    # **Prevent `MessageNotModified` error**
+    current_text = callback_query.message.text or ""
+    current_markup = callback_query.message.reply_markup or InlineKeyboardMarkup()
+
+    if current_text == response and current_markup == markup:
+        await callback_query.answer("You are already on this page.", show_alert=True)
+        return
+
+    await callback_query.message.edit_text(response, parse_mode="Markdown", reply_markup=markup)
+    await callback_query.answer()
 
 
 if __name__ == "__main__":

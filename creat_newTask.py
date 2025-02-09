@@ -9,7 +9,8 @@ from datetime import datetime
 # Get the current date
 
 db = TaskManagerDB()
-selected_members = {}  # Temporarily stores selected members by user ID
+selected_members = {} 
+task_data_full = {} # Temporarily stores selected members by user ID
 
 async def start_task_creation(message: types.Message):
     await message.answer("Please provide the task name:")
@@ -17,12 +18,14 @@ async def start_task_creation(message: types.Message):
 
 async def process_task_name(message: types.Message, state: FSMContext):
     await state.update_data(task_name=message.text)
+    task_data_full['task_name'] = message.text
     await message.answer("Please provide the task description:")
     await NewTaskStates.waiting_for_task_description.set()
 
 async def process_task_description(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     group_name = db.get_group_name_by_id(user_id)
+    task_data_full['task_description'] = message.text
 
     if not group_name:
         await message.answer("You are not a member of any group.")
@@ -60,12 +63,25 @@ async def member_selected(callback_query: CallbackQuery, state: FSMContext):
     user_id = callback_query.from_user.id
     member_id = callback_query.data.split("_")[-1]  # Extract member_id from callback data
 
-    selected_members.setdefault(user_id, []).append({'member_id': member_id})
-    await state.update_data(selected_members=selected_members[user_id], current_role=None)
+    # Ensure user has a list for selected members
+    if user_id not in selected_members:
+        selected_members[user_id] = []
+
+    # Check if member_id already exists to prevent duplicates
+    if member_id not in [m['member_id'] for m in selected_members[user_id]]:
+        selected_members[user_id] = [{'member_id': member_id}]  # Overwrite instead of append
+
+    # Update state with only the latest unique selected member
+    await state.update_data(selected_members=selected_members[user_id])
+
+    # Store only member_id in task_data_full
+    task_data_full['selected_members'] = selected_members[user_id]  
 
     await callback_query.message.edit_reply_markup()
     await callback_query.message.answer("What is this member's role?")
     await NewTaskStates.waiting_for_role.set()
+
+
 
 async def process_role(message: types.Message, state: FSMContext):
     role = message.text
@@ -113,15 +129,16 @@ async def process_deadline(message: types.Message, state: FSMContext):
     remaining_members = [
         m for m in all_members if (m[0] if isinstance(m, tuple) else m['member_id']) not in assigned_member_ids
     ]
-
+    current_date = datetime.now()
+    formatted_date = current_date.strftime("%Y-%m-%d")
     # Show remaining members or finish if all assigned
     if remaining_members:
+        print("Sended")
         await show_member_selection(message, remaining_members, state)
         real_member_info = next((m for m in all_members if m[0] == member_id), None)
-        current_date = datetime.now()
+        
 
-    # Format the date to 'YYYY-MM-DD'
-        formatted_date = current_date.strftime("%Y-%m-%d")
+    
         if real_member_info:
             real_member_id = real_member_info[0]  # e.g., 'bb'
             user_name = real_member_info[1]  # e.g., 2
@@ -132,24 +149,37 @@ async def process_deadline(message: types.Message, state: FSMContext):
                 'Assigned', task_data["task_summary"], task_data['deadline'],
                 formatted_date
             )
+            # Save creation details for the task
+            user_state = await state.get_data()
+            task_name = user_state.get("task_name", "Unnamed Task")
+            task_description = user_state.get("task_description", "No Description")
+            task_participants = str(real_member_id)  # Adjust if multiple participants
+            db.save_created_task_to_db(
+                task_name, task_description, formatted_date, task_participants, 'Assigned', group_name['group_name']
+            )
     else:
         await message.answer("All members have been assigned.")
 
-
         real_member_info = next((m for m in all_members if m[0] == member_id), None)
-        
         
         if real_member_info:
             real_member_id = real_member_info[0]  # e.g., 'bb'
-            user_name = real_member_info[1]  # e.g., 2
+            user_name = real_member_info[1]  # e.g., 
             
-            
+            selected_members[user_id] = [{'member_id': m['member_id']} for m in selected_members[user_id]]
 
+            task_data_full['selected_members'] = selected_members[user_id]
+            unique_members = list({member['member_id'] for member in task_data_full['selected_members']})
+           
+            db.save_created_task_to_db(task_data_full['task_name'], task_data_full['task_description'], unique_members[0], 'In Process', group_name['group_name'])
+            await bot.send_message(chat_id=user_id, text=f"You have a new task:\n\n{task_data['task_summary']}\n\nDeadline: {task_data['deadline']} days")
+            
             # Save the task in the database
             db.save_task_to_db(
-                real_member_id, user_name, group_name['group_name'], 
-                'Assigned', task_data["task_summary"], task_data['deadline']
-            )
+                    user_name, real_member_id, group_name['group_name'], 
+                    'Assigned', task_data["task_summary"], task_data['deadline'],
+                    formatted_date  # or appropriate value for registred_data
+                )
 
             
     await state.finish()

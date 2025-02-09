@@ -265,6 +265,49 @@ class TaskManagerDB:
             print(f"Error saving task to database: {e}")
 
 
+    def save_created_task_to_db(self, task_name, task_description, task_participants, task_status, group_name):
+            """
+            Save a created task to the tasks table.
+
+            :param task_name: Name of the task.
+            :param task_description: Task description (optional).
+            :param task_deadline: Deadline for the task (as a string).
+            :param task_participants: Comma-separated list of user IDs assigned to the task.
+            :param task_status: Status of the task (e.g., "Created", "Pending", "Done").
+            :param group_name: Group associated with the task.
+            """
+            try:
+                self.cursor.execute('''
+                    INSERT INTO tasks (task_name, task_description, task_participants, task_status, group_name)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (task_name, task_description, task_participants, task_status, group_name))
+                self.conn.commit()
+                print(f"Task '{task_name}' created successfully in group '{group_name}'.")
+            except sqlite3.Error as e:
+                print(f"Error saving created task: {e}")
+
+
+    def fetch_data_from_tasks(self, user_id):
+        """Fetch all data from the tasks table."""
+        self.cursor.execute("SELECT * FROM tasks WHERE group_name = (SELECT group_name FROM groups WHERE admin_id = ?);", (user_id,))
+        rows = self.cursor.fetchall()
+        print(rows)
+        # Convert rows to a list of dictionaries
+        tasks_data = []
+        for row in rows:
+            task_dict = {
+                'task_id': row[0],
+                'task_name': row[1],
+                'task_description': row[2],
+                'task_participants': row[3],
+                'task_status': row[4],
+                'group_name': row[5]
+            }
+            tasks_data.append(task_dict)
+        
+        return tasks_data
+
+
     def fetch_data_from_workers(self):
         """Fetch all data from the workers table."""
         self.cursor.execute("SELECT * FROM worker;")
