@@ -291,7 +291,7 @@ class TaskManagerDB:
         """Fetch all data from the tasks table."""
         self.cursor.execute("SELECT * FROM tasks WHERE group_name = (SELECT group_name FROM groups WHERE admin_id = ?);", (user_id,))
         rows = self.cursor.fetchall()
-        print(rows)
+ 
         # Convert rows to a list of dictionaries
         tasks_data = []
         for row in rows:

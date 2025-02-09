@@ -164,8 +164,7 @@ async def process_deadline(message: types.Message, state: FSMContext):
         
         if real_member_info:
             real_member_id = real_member_info[0]  # e.g., 'bb'
-            user_name = real_member_info[1]  # e.g., 
-            
+            user_name = real_member_info[1]  # e.g.,             
             selected_members[user_id] = [{'member_id': m['member_id']} for m in selected_members[user_id]]
 
             task_data_full['selected_members'] = selected_members[user_id]
