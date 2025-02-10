@@ -22,7 +22,6 @@ class TaskManagerDB:
                 task_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task_name TEXT NOT NULL,
                 task_description TEXT,  -- Optional
-                task_deadline TEXT NOT NULL,  -- Consider using a DATE type
                 task_participants TEXT NOT NULL,  -- Comma-separated list of user IDs
                 task_status TEXT DEFAULT 'pending',  -- Default value for task status
                 group_name TEXT
@@ -53,18 +52,21 @@ class TaskManagerDB:
                 user_id INT UNIQUE,
                 user_name TEXT,
                 group_name TEXT,
-                joined_data TEXT
+                joined_data TEXT,
+                member_points INT DEFAULT 0,
+                member_rank TEXT DEFAULT 'Bronze'
             )
         ''')
 
         self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS workers (
+            CREATE TABLE IF NOT EXISTS worker (
                 user_id INT UNIQUE,
                 user_name TEXT,
                 group_name TEXT,  -- Renamed from "group"
                 status TEXT,
                 current_job TEXT,
-                deadline INT
+                deadline INT,
+                registred_data TEXT
             )
         ''')
 

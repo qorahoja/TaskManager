@@ -36,9 +36,9 @@ def create_member_for_role(members):
         
         button = types.InlineKeyboardButton(
             text=member_id,
-            callback_data=f"member_role_{member_id}"  # Use member ID for callback data
+            callback_data=f"role_{member_id}"  # Use member ID for callback data
         )
-        print(f"Adding button with callback_data: member_role_{member_id}")  # Log callback data
+        print(f"Adding button with callback_data: role_{member_id}")  # Log callback data
         keyboard.add(button)
     
     # Add a "Done" button to end member selection
@@ -54,7 +54,7 @@ def create_updated_keyboard(selected_member_id):
     button_text = "✅ Selected"
     button = types.InlineKeyboardButton(
         text=button_text, 
-        callback_data=f"member_role_{selected_member_id}"  # Still use the same callback data
+        callback_data=f"role_{selected_member_id}"  # Still use the same callback data
     )
     keyboard.add(button)
     

@@ -7,7 +7,7 @@ db = TaskManagerDB()
 async def handle_action(message: types.Message, user_id: int):
     markup = InlineButtons.create_member_action_buttons(user_id)
     await message.delete()
-    await message.answer(f"Choose action for this user", reply_markup=markup)
+    await message.answer(f"Choose action for sthis user", reply_markup=markup)
 
 
 

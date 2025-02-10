@@ -88,10 +88,10 @@ class TaskManagerDB:
         return result is not None  # Return True if the user is an admin, otherwise False
 
 
-    def add_member_to_group(self, user_id: int, user_name: str, group_name: str):
+    def add_member_to_group(self, user_id: int, user_name: str, group_name: str,  joined_data: str):
         self.cursor.execute('''
-            INSERT INTO members (user_id, user_name, group_name) VALUES (?, ?, ?)
-        ''', (user_id, user_name, group_name))
+            INSERT INTO members (user_id, user_name, group_name, joined_data) VALUES (?, ?, ?, ?)
+        ''', (user_id, user_name, group_name, joined_data))
         self.conn.commit()
 
 
@@ -328,3 +328,42 @@ class TaskManagerDB:
             workers_data.append(worker_dict)
         
         return workers_data
+    
+
+
+    def fetch_deadline(self):
+        """Fetch the deadline for a specific user."""
+        self.cursor.execute("SELECT deadline, registred_data, user_id FROM worker")
+        result = self.cursor.fetchall()
+        if result:
+            return result
+        return None
+    
+
+    def delete_from_workers(self, user_id):
+        query = "DELETE FROM worker WHERE user_id = ?"
+        self.cursor.execute(query, (user_id,))
+        self.conn.commit()
+
+
+    def is_member(self, user_id: int):
+        self.cursor.execute("SELECT user_id FROM members WHERE user_id = ?", (user_id,))
+        result = self.cursor.fetchone()  # Fetch one record that matches the user_id
+        return result[0]  # This will return None if the user does not exist
+
+
+    def is_member_assigned(self, user_id: int):
+        self.cursor.execute("SELECT user_id FROM worker WHERE user_id = ?", (user_id,))
+        result = self.cursor.fetchone()  # Fetch one record that matches the user_id    
+        return result[0]  # This will return None if the user does not exist
+    
+
+    def find_tester(self):
+        self.cursor.execute("SELECT user_id FROM worker WHERE current_job = 'Tester'")
+        result = self.cursor.fetchone()
+        return result
+    
+
+    
+    
+    
